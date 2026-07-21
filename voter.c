@@ -4,11 +4,13 @@
 #include <ctype.h>
 #include <time.h>
 
+#pragma pack(push, 1)
 typedef struct {
     char firstName[50];
-    char middleInitial; 
+    char middleInitial;
     char lastName[70];
 } NAME;
+#pragma pack(pop)
 
 typedef struct {
     NAME name;
@@ -17,144 +19,189 @@ typedef struct {
     float weight;
     int timesWon;
 } VOTER;
+void readLine(char *buffer,size_t size) {
+    if (fgets(buffer,size,stdin) != NULL) {
+        buffer[strcspn(buffer, "\r\n")] = '\0';
+    } else {
+        buffer[0] = '\0';
+    }
+}
 
-void fixSentenceCase(char *str);
-void sanitizeVoter(VOTER *v);
-void getWeightStatement(VOTER *v, char *dest);
+void capitalizeString(char *str) {
+    if (str != NULL && strlen(str) > 0) {
+        str[0] = toupper((unsigned char)str[0]);
+        for (int i = 1; str[i] != '\0'; i++) {
+            str[i] = tolower((unsigned char)str[i]);
+        }
+    }
+}
 
-int main() {
-    srand(time(NULL));
+void formatName(NAME *n) {
+    capitalizeString(n->firstName);
+    capitalizeString(n->lastName);
+    if (n->middleInitial != '\0' && n->middleInitial != ' ') {
+        n->middleInitial = toupper((unsigned char)n->middleInitial);
+    }
+}
 
-    FILE *file = fopen("SRC/input.bin", "rb");
+void validateGender(char *gender) {
+    *gender = toupper((unsigned char)*gender);
+    if (*gender != 'M' && *gender != 'F' && *gender != 'O') {
+        *gender = 'U';
+    }
+}
+
+void getWeightCategory(char gender, float weight, char *categoryStr) {
+    if (gender == 'M') {
+        if (weight < 125.0f) strcpy(categoryStr,"SKINNY");
+        else if (weight <= 225.0f) strcpy(categoryStr, "FIT");
+        else strcpy(categoryStr,"FAT");
+    } else if (gender == 'F') {
+        if (weight < 100.0f) strcpy(categoryStr,"SKINNY");
+        else if (weight <= 150.0f) strcpy(categoryStr, "FIT");
+        else strcpy(categoryStr,"FAT");
+    } else {
+        if (weight < 115.0f) strcpy(categoryStr, "SKINNY");
+        else if (weight <= 200.0f) strcpy(categoryStr, "FIT");
+        else strcpy(categoryStr,"FAT");
+    }
+}
+
+int main(void) {
+    srand((unsigned int)time(NULL));
+    const char *filePath = "SRC/input.bin";
+    FILE *file = fopen(filePath,"rb");
     if (!file) {
-        printf("Error: Could not open\n");
-        return 1;
+        filePath = "input.bin";
+        file = fopen(filePath, "rb");
     }
-
-    int totalSize = 0;
+    
+    int totalCapacity = 0;
     int effectiveSize = 0;
+    VOTER **voters = NULL;
 
-    fread(&totalSize, sizeof(int), 1, file);
-    fread(&effectiveSize, sizeof(int), 1, file);
-    VOTER **voters = (VOTER **)malloc(totalSize * sizeof(VOTER *));
-    for (int i = 0; i < totalSize; i++) voters[i] = NULL;
+    if (file != NULL) {
+        fread(&totalCapacity, sizeof(int), 1,file);
+        fread(&effectiveSize, sizeof(int), 1,file);
 
-    for (int i = 0; i < effectiveSize; i++) {
-        voters[i] = (VOTER *)malloc(sizeof(VOTER));
-        fread(voters[i], sizeof(VOTER), 1, file);
-        voters[i]->timesWon = 0; 
-        sanitizeVoter(voters[i]);
+        if (totalCapacity > 0) {
+            voters = (VOTER **)malloc(sizeof(VOTER *) * totalCapacity);
+            for (int i = 0; i < effectiveSize; i++) {
+                voters[i] = (VOTER *)malloc(sizeof(VOTER));
+                fread(&voters[i]->name, sizeof(NAME), 1, file);
+                fread(&voters[i]->gender, sizeof(char), 1, file);
+                fread(&voters[i]->favoriteNumber, sizeof(int), 1, file);
+                fread(&voters[i]->weight, sizeof(float), 1, file);
+                voters[i]->timesWon = 0;
+            }
+        }
+        fclose(file);
     }
-    fclose(file);
-    char keepGoing = 'Y';
-    while ((keepGoing == 'y' || keepGoing == 'Y') && effectiveSize < totalSize) {
+
+    if (totalCapacity == 0) {
+        totalCapacity = 10;
+        effectiveSize = 0;
+        voters = (VOTER **)malloc(sizeof(VOTER *) * totalCapacity);
+    }
+    char inputBuf[100];
+    printf("ADD VOTER RECORDS\n");
+    
+    while (effectiveSize < totalCapacity) {
+        printf("\nDo you want to enter a new record?(Y/N): ");
+        readLine(inputBuf, sizeof(inputBuf));
+        if (toupper(inputBuf[0]) != 'Y') {
+            break;
+        }
+
         voters[effectiveSize] = (VOTER *)malloc(sizeof(VOTER));
         VOTER *v = voters[effectiveSize];
         v->timesWon = 0;
 
-        printf("\nEnter First Name: ");
-        scanf("%49s", v->name.firstName);
-        printf("Enter Middle Initial (Use '-' if none): ");
-        scanf(" %c", &v->name.middleInitial);
-        printf("Enter Last Name: ");
-        scanf("%69s", v->name.lastName);
+        printf("Enter First Name: ");
+        readLine(v->name.firstName, sizeof(v->name.firstName));
+
+        printf("Enter middle Initial (leave blank if none): ");
+        readLine(inputBuf, sizeof(inputBuf));
+        v->name.middleInitial = inputBuf[0];
+
+        printf("Enter Last name: ");
+        readLine(v->name.lastName, sizeof(v->name.lastName));
+
         printf("Enter Gender (M, F, O, U): ");
-        scanf(" %c", &v->gender);
-        printf("Enter Favorite Number (0-999): ");
-        scanf("%d", &v->favoriteNumber);
-        printf("Enter Weight: ");
-        scanf("%f", &v->weight);
-        sanitizeVoter(v);
+        readLine(inputBuf, sizeof(inputBuf));
+        v->gender = inputBuf[0];
+
+        printf("Enter favorite Number (0 - 999): ");
+        readLine(inputBuf, sizeof(inputBuf));
+        v->favoriteNumber = atoi(inputBuf);
+
+        printf("Enter weight (10.0 - 999.0): ");
+        readLine(inputBuf, sizeof(inputBuf));
+        v->weight = (float)atof(inputBuf);
+
         effectiveSize++;
-
-        if (effectiveSize >= totalSize) {
-            printf("\nArray is full.\n");
-            break;
-        }
-
-        printf("Enter another record? (Y/N): ");
-        scanf(" %c", &keepGoing);
-    }
-    int drawings[500];
-    for (int i = 0; i < 500; i++) {
-        drawings[i] = rand() % 1000;
     }
     for (int i = 0; i < effectiveSize; i++) {
-        for (int j = 0; j < 500; j++) {
-            if (voters[i]->favoriteNumber == drawings[j]) {
+        formatName(&voters[i]->name);
+        validateGender(&voters[i]->gender);
+    }
+
+    for (int draw = 0; draw < 500; draw++) {
+        int winningNum = rand() % 1000;
+        for (int i = 0; i < effectiveSize; i++) {
+            if (voters[i]->favoriteNumber == winningNum) {
                 voters[i]->timesWon++;
             }
         }
     }
-    printf("\n%-25s %-6s %-12s %-11s %-8s %-15s\n", 
+
+    printf("\n%-25s %-8s %-12s %-10s %-8s %-15s\n", 
            "Name", "Gender", "Favorite No.", "Times Won", "Weight", "Weight Statement");
-    
+
     for (int i = 0; i < effectiveSize; i++) {
-        VOTER *v = voters[i];
         char fullName[130];
-        char weightStatement[10];
-        if (v->name.middleInitial != '-') {
-            sprintf(fullName, "%s %c. %s", v->name.firstName, v->name.middleInitial, v->name.lastName);
+        if (voters[i]->name.middleInitial != '\0' && voters[i]->name.middleInitial != ' ') {
+            snprintf(fullName, sizeof(fullName), "%s %c. %s", 
+                     voters[i]->name.firstName, 
+                     voters[i]->name.middleInitial, 
+                     voters[i]->name.lastName);
         } else {
-            sprintf(fullName, "%s %s", v->name.firstName, v->name.lastName);
+            snprintf(fullName, sizeof(fullName), "%s %s", 
+                     voters[i]->name.firstName, 
+                     voters[i]->name.lastName);
         }
 
-        getWeightStatement(v, weightStatement);
+        char weightCategory[10];
+        getWeightCategory(voters[i]->gender, voters[i]->weight, weightCategory);
 
-        printf("%-25s %-6c %-12d %-11d %-8.0f %-15s\n", 
-               fullName, v->gender, v->favoriteNumber, v->timesWon, v->weight, weightStatement);
+        printf("%-25s %-8c %-12d %-10d %-8.0f %-15s\n",
+               fullName,
+               voters[i]->gender,
+               voters[i]->favoriteNumber,
+               voters[i]->timesWon,
+               voters[i]->weight,
+               weightCategory);
     }
-    FILE *outFile = fopen("SRC/input.bin", "wb");
-    if (outFile) {
-        fwrite(&totalSize, sizeof(int), 1, outFile);
-        fwrite(&effectiveSize, sizeof(int), 1, outFile);
+    file = fopen(filePath,"wb");
+    if (file != NULL) {
+        fwrite(&totalCapacity, sizeof(int), 1,file);
+        fwrite(&effectiveSize, sizeof(int), 1,file);
+
         for (int i = 0; i < effectiveSize; i++) {
-            fwrite(voters[i], sizeof(VOTER), 1, outFile);
+            fwrite(&voters[i]->name, sizeof(NAME),1, file);
+            fwrite(&voters[i]->gender, sizeof(char),1, file);
+            fwrite(&voters[i]->favoriteNumber, sizeof(int), 1,file);
+            fwrite(&voters[i]->weight, sizeof(float), 1,file);
         }
-        fclose(outFile);
-        printf("\nSuccessfully exported to SRC/input.bin.\n");
+        fclose(file);
+        printf("\nData successfully saved to %s\n", filePath);
+    } else {
+        printf("\nError opening file for writing.\n");
     }
 
-    
-    for (int i = 0; i < totalSize; i++) {
-        if (voters[i]) free(voters[i]);
+    for (int i = 0; i < effectiveSize; i++) {
+        free(voters[i]);
     }
     free(voters);
-
     return 0;
-}
-void fixSentenceCase(char *str) {
-    if (str[0] == '\0') return;
-    str[0] = toupper((unsigned char)str[0]);
-    for (int i = 1; str[i] != '\0'; i++) {
-        str[i] = tolower((unsigned char)str[i]);
-    }
-}
-void sanitizeVoter(VOTER *v) {
-    fixSentenceCase(v->name.firstName);
-    fixSentenceCase(v->name.lastName);
-    if (v->name.middleInitial != '-') {
-        v->name.middleInitial = toupper((unsigned char)v->name.middleInitial);
-    }
-    v->gender = toupper((unsigned char)v->gender);
-    if (v->gender != 'M' && v->gender != 'F' && v->gender != 'O') {
-        v->gender = 'U';
-    }
-}
-void getWeightStatement(VOTER *v, char *dest) {
-    float w = v->weight;
-    char g = v->gender;
-    if (g == 'M') {
-        if (w < 125.0) strcpy(dest, "SKINNY");
-        else if (w <= 225.0) strcpy(dest, "FIT");
-        else strcpy(dest, "FAT");
-    } else if (g == 'F') {
-        if (w < 100.0) strcpy(dest, "SKINNY");
-        else if (w <= 150.0) strcpy(dest, "FIT");
-        else strcpy(dest, "FAT");
-    } else {
-        if (w < 115.0) strcpy(dest, "SKINNY");
-        else if (w <= 200.0) strcpy(dest, "FIT");
-        else strcpy(dest, "FAT");
-    }
 }
